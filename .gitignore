@@ -1,0 +1,8 @@
+venv/
+.idea/
+__pycache__/
+*.pyc
+.DS_Store
+*.mp3
+feedback.txt
+training_modules/data/

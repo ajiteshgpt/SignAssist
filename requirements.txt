@@ -1,0 +1,8 @@
+opencv-python
+mediapipe
+scikit-learn
+numpy
+matplotlib
+gTTS
+Pillow
+customtkinter
