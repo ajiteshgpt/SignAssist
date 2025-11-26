@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sign Language Recognition</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="second-page.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+</head>
+<body>
+    <header>
+        <h1>Sign Language Recognition</h1>
+        <p>Empowering the deaf community with real-time sign language recognition.</p>
+    </header>
+    <section id="how-to-use">
+        <h2>How to Use</h2>
+        <h4>Follow these simple steps to start using our sign language recognition feature:</h4>
+        <ol>
+            <li><strong>Grant Camera Access</strong><br>Allow our app to access your device's camera so we can capture your sign language gestures.</li>
+            <li><strong>Position Yourself</strong><br>Stand or sit in front of the camera and make sure your hands are visible.</li>
+            <li><strong>Start Signing</strong><br>Perform your sign language gestures, and our app will recognize and display them in real-time.</li>
+        </ol>
+    </section>
+    <section id="recognition">
+        <div>
+            <h1>Camera Access</h1>
+            <div class="video-container">
+                <video id="video" autoplay playsinline></video>
+                <canvas id="output"></canvas>
+                <div id="placeholderText">Camera is off. Please start the camera.</div>
+                <div id="buttons">
+                    <button id="startCamera">Start Camera</button>
+                    <button id="stopCamera">Stop Camera</button>
+                </div>
+            </div>
+        </div>
+        <p>Our advanced computer vision technology accurately recognizes and displays sign language gestures in real-time.</p>
+    </section>
+    <section id="resources">
+        <h2>Resources</h2>
+        <div style="margin-left: 12vw; margin-bottom: 12px;">Explore these resources to learn more about sign language and the deaf community.</div>
+        <div class="resource-container">
+            <div class="resource-item">
+                <i class="fas fa-book"></i>
+                <h3>Sign Language Basics</h3>
+                <p>Learn the fundamentals of sign language.</p>
+            </div>
+            <div class="resource-item">
+                <i class="fas fa-video"></i>
+                <h3>Sign Language Tutorials</h3>
+                <p>Watch step-by-step sign language lessons.</p>
+            </div>
+            <div class="resource-item">
+                <i class="fas fa-hands-helping"></i>
+                <h3>Deaf Community Support</h3>
+                <p>Connect with the deaf community and find support.</p>
+            </div>
+        </div>
+        <div class="feedback">
+            <button>Feedback</button>
+            <p>Share your valuable feedback with us for improvement.</p>
+        </div>
+    </section>
+    <footer>
+        <div class="sign">
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" color="white"
+                stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+                class="w-6 h-6">
+                <path d="M18 11V6a2 2 0 0 0-2-2v0a2 2 0 0 0-2 2v0"></path>
+                <path d="M14 10V4a2 2 0 0 0-2-2v0a2 2 0 0 0-2 2v2"></path>
+                <path d="M10 10.5V6a2 2 0 0 0-2-2v0a2 2 0 0 0-2 2v8"></path>
+                <path d="M18 8a2 2 0 1 1 4 0v6a8 8 0 0 1-8 8h-2c-2.8 0-4.5-.86-5.99-2.34l-3.6-3.6a2 2 0 0 1 2.83-2.82L7 15"></path>
+            </svg>
+            SignAssist
+        </div>
+    </footer>
+    <!-- Include TensorFlow.js and HandPose from CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/handpose"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const observer = new IntersectionObserver((entries) => {
+                entries.forEach(entry => {
+                    if (entry.isIntersecting) {
+                        entry.target.classList.add('animate');
+                        entry.target.classList.remove('animate-reverse');
+                    } else {
+                        entry.target.classList.remove('animate');
+                        entry.target.classList.add('animate-reverse');
+                    }
+                });
+            }, {
+                threshold: 0.1,
+            });
+            const elements = document.querySelectorAll('header, #how-to-use, #recognition, #resources, footer');
+            elements.forEach(element => {
+                observer.observe(element);
+            });
+        });
+
+        const videoElement = document.getElementById('video');
+        const canvas = document.getElementById('output');
+        const ctx = canvas.getContext('2d');
+        const startCameraButton = document.getElementById('startCamera');
+        const stopCameraButton = document.getElementById('stopCamera');
+        const placeholderText = document.getElementById('placeholderText');
+        let stream;
+        let handposeModel;
+
+        const fingerJoints = {
+            thumb: [0, 1, 2, 3, 4],
+            indexFinger: [0, 5, 6, 7, 8],
+            middleFinger: [0, 9, 10, 11, 12],
+            ringFinger: [0, 13, 14, 15, 16],
+            pinky: [0, 17, 18, 19, 20]
+        };
+
+        async function setupCamera() {
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({
+                    video: { width: 640, height: 480 }
+                });
+                videoElement.srcObject = stream;
+                return new Promise((resolve) => {
+                    videoElement.onloadedmetadata = () => {
+                        canvas.width = videoElement.videoWidth;
+                        canvas.height = videoElement.videoHeight;
+                        resolve(videoElement);
+                    };
+                });
+            } catch (error) {
+                console.error("Error accessing camera: ", error);
+                alert("Camera access is required for hand tracking.");
+            }
+        }
+
+        function drawLandmarks(landmarks) {
+            Object.keys(fingerJoints).forEach(finger => {
+                const joints = fingerJoints[finger];
+                for (let i = 0; i < joints.length - 1; i++) {
+                    const start = landmarks[joints[i]];
+                    const end = landmarks[joints[i + 1]];
+                    
+                    ctx.beginPath();
+                    ctx.moveTo(start[0], start[1]);
+                    ctx.lineTo(end[0], end[1]);
+                    ctx.strokeStyle = "violet"; // Line color
+                    ctx.lineWidth = 2;
+                    ctx.stroke();
+                }
+            });
+
+            for (let i = 0; i < landmarks.length; i++) {
+                const x = landmarks[i][0];
+                const y = landmarks[i][1];
+
+                ctx.beginPath();
+                ctx.arc(x, y, 5, 0, 3 * Math.PI);
+                ctx.fillStyle = "green"; // Dot color
+                ctx.fill();
+            }
+        }
+
+        async function detectHands() {
+            const predictions = await handposeModel.estimateHands(videoElement);
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            if (predictions.length > 0) {
+                predictions.forEach((prediction) => {
+                    const landmarks = prediction.landmarks;
+                    drawLandmarks(landmarks);
+                });
+            }
+
+            requestAnimationFrame(detectHands);
+        }
+
+        async function startCamera() {
+            await setupCamera();
+            canvas.width = videoElement.videoWidth;
+            canvas.height = videoElement.videoHeight;
+            handposeModel = await handpose.load();
+            detectHands();
+            placeholderText.style.display = 'none';
+        }
+
+        function stopCamera() {
+            if (stream) {
+                let tracks = stream.getTracks();
+                tracks.forEach(track => track.stop());
+                videoElement.srcObject = null;
+                placeholderText.style.display = 'block';
+            }
+        }
+
+        startCameraButton.addEventListener('click', startCamera);
+        stopCameraButton.addEventListener('click', stopCamera);
+        startCameraButton.addEventListener('click', async () => {
+        try {
+            placeholderText.style.display = 'none';
+            stream = await navigator.mediaDevices.getUserMedia({ video: true });
+            videoElement.srcObject = stream;
+        } catch (error) {
+            console.error("Error accessing the camera: ", error);
+        }
+    });
+
+    // Function to stop the camera
+    stopCameraButton.addEventListener('click', () => {
+        if (stream) {
+            let tracks = stream.getTracks();
+            tracks.forEach(track => track.stop());
+            videoElement.srcObject = null;
+            placeholderText.style.display = 'block';
+        }
+    });
+    </script>
+</body>
+</html>
